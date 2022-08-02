@@ -1,0 +1,121 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 32
+    buildToolsVersion "32.0.0"
+    ndkVersion "23.1.7779620"
+    defaultConfig {
+        applicationId "top.canyie.riru_isolatedmagiskhider"
+        minSdkVersion 24
+        targetSdkVersion 32
+        versionCode 1
+        versionName "1.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+                arguments "-DRIRU_NEW_MODULE_API_VERSION=$rootProject.ext.riruNewApiVersion",
+                        "-DRIRU_MODULE_VERSION_CODE=$rootProject.ext.versionCode",
+                        "-DRIRU_MODULE_VERSION_NAME:STRING=\"$rootProject.ext.versionName\"",
+                        "-DANDROID_STL=none"
+            }
+        }
+        ndk {
+            moduleName "momohider"
+            abiFilters  "arm64-v8a", "armeabi-v7a", "x86_64", "x86"
+        }
+
+        buildFeatures {
+            prefab true
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.18.1"
+        }
+    }
+}
+
+dependencies {
+    implementation 'dev.rikka.ndk.thirdparty:cxx:1.2.0'
+    implementation 'dev.rikka.ndk.thirdparty:xhook:1.2.0'
+}
+
+def moduleProp = [
+        id: 'riru_momohider',
+        name: 'Riru - MomoHider',
+        author: 'canyie',
+        version: rootProject.ext.versionName,
+        versionCode: rootProject.ext.versionCode,
+        description: 'A Riru module tries to make Magisk more hidden. You can find its source at https://github.com/canyie/Riru-MomoHider',
+        minMagisk: rootProject.ext.minMagisk,
+        api: rootProject.ext.riruApiVersion
+]
+
+def tempPath = "$buildDir/intermediates/magisk"
+def tempTemplatePath = "$tempPath/template"
+def nativeDir = "$tempTemplatePath/riru/"
+def nativeDirX86 = "$tempTemplatePath/riru_x86/"
+def nativeAbiToSystemDirMap = ['armeabi-v7a': 'lib', 'arm64-v8a': 'lib64']
+def nativeAbiToSystemDirMapX86 = ['x86': 'lib', 'x86_64': 'lib64']
+def nativeLibName = 'libmomohider.so'
+def releasePath = "$buildDir/outputs/magisk"
+
+task copyMagiskTemplate(type: Copy) {
+    from file("$rootDir/template")
+    into file(tempTemplatePath)
+
+    inputs.properties moduleProp
+    doLast {
+        file("$tempTemplatePath/module.prop").withWriter('utf-8') { writer ->
+            moduleProp.each { name, value -> writer.write("$name=$value\n") }
+        }
+    }
+}
+
+task copyNativeLibs() {
+    doFirst {
+        delete file("$nativeDir")
+    }
+
+    doLast {
+        stripReleaseDebugSymbols.outputs.files.each { baseInputDir ->
+            nativeAbiToSystemDirMap.each { origin, to ->
+                copy {
+                    from file("$baseInputDir/lib/$origin/$nativeLibName")
+                    into file("$nativeDir/$to")
+                }
+            }
+
+            nativeAbiToSystemDirMapX86.each { origin, to ->
+                copy {
+                    from file("$baseInputDir/lib/$origin/$nativeLibName")
+                    into file("$nativeDirX86/$to")
+                }
+            }
+        }
+    }
+}
+
+task zipMagiskFiles(type: Zip) {
+    from file(tempTemplatePath)
+    destinationDir file(releasePath)
+    baseName 'Riru-MomoHider'
+}
+
+task assembleMagiskRelease(type: GradleBuild, dependsOn: build) {
+    tasks = [
+            'copyMagiskTemplate',
+            'copyNativeLibs',
+            'zipMagiskFiles'
+    ]
+}
