@@ -237,14 +237,25 @@ bool IsApp(int app_id) {
 
 void InitProcessState(int uid, bool is_child_zygote, const char *process) {
     char buf[4098];
+    char buf2[4098];
+    // another.stupid_name:abcdefgh... -> another.stupid_name
+    for (int i=0; process[i]; i++){
+	if (process[i] == ':') break;
+	buf2[i] = process[i];
+    }
     int app_id = uid % 100000;
-    isolated_ = app_id >= 90000;
+
     sprintf(buf, "%s/target/%s", module_dir_, process);
-    if (access(buf, F_OK) == 0){
-        LOGI("Target process: %s", process);
+    if (access(buf, F_OK) == 0)
         // treat target as isolated process :}
         isolated_ = true;
-    }
+
+    sprintf(buf, "%s/target/%s", module_dir_, buf2);
+    if (app_id >= 90000 && access(buf, F_OK) == 0)
+        // target isolated process
+        isolated_ = true;
+
+    if (isolated_) LOGI("Handle process: name=[%s], uid=[%d]", process, app_id);
     app_zygote_ = is_child_zygote && (IsApp(app_id) || isolated_);
 }
 
@@ -388,10 +399,9 @@ failed = failed || RegisterHook(#NAME, reinterpret_cast<void*>(REPLACE), reinter
 }
 
 void onModuleLoaded() {
-    LOGI("Magisk module dir is %s", module_dir_);
     magisk_tmp_ = ReadMagiskTmp();
-    LOGI("Magisk temp path is %s", magisk_tmp_);
-    hide_isolated_ = Exists(kIsolated);
+    LOGI("MAGISKTMP is %s", magisk_tmp_);
+    hide_isolated_ = true;
     magic_handle_app_zygote_ = Exists(kMagicHandleAppZygote);
     use_nsholder_ = Exists(kSetNs);
     RegisterHooks();
