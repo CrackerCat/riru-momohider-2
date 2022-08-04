@@ -3,7 +3,11 @@ MODDIR="${0%/*}"
 rm -rf "$MODDIR/target"
 ## hidelist for momohider
 { while true; do
-       HIDELIST="$(magisk --sqlite "SELECT process FROM hidelist" | sed "s/^process=//g")"
+       HIDELIST="
+       com.google.android.gms
+       com.google.android.gms.unstable
+       $(magisk --sqlite "SELECT process FROM denylist" | sed "s/^process=//g")
+       $(magisk --sqlite "SELECT process FROM hidelist" | sed "s/^process=//g")"
        rm -rf "$MODDIR/target.tmp"
        rm -rf "$MODDIR/target.old"
        mkdir "$MODDIR/target.tmp" 
@@ -14,6 +18,6 @@ rm -rf "$MODDIR/target"
        mv -fT "$MODDIR/target.tmp" "$MODDIR/target"
        rm -rf "$MODDIR/target.tmp"
        rm -rf "$MODDIR/target.old"
-       sleep 3
+       sleep 3 || break
 done; } &
 . "$MODDIR/props.sh"
